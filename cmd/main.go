@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 
 	"disk-paxos/internal/config"
@@ -24,9 +23,6 @@ func main() {
 	}
 
 	p := processor.NewProcessor(1, cfg, log)
-	if err := p.WriteToDisks(context.Background()); err != nil {
-		log.Fatal("", zap.Error(err))
-	}
 
 	for i := range 3 {
 		value := fmt.Sprintf("value %d", i)
