@@ -2,8 +2,8 @@ package disk
 
 import (
 	"context"
+	"disk-paxos/internal/block"
 	"disk-paxos/internal/config"
-	"disk-paxos/internal/processor"
 	"fmt"
 
 	"github.com/redis/go-redis/v9"
@@ -27,7 +27,7 @@ func NewClient(cfg *config.Config, addr string) *Client {
 	}
 }
 
-func (c *Client) SetBlock(ctx context.Context, id int, block processor.Block) error {
+func (c *Client) SetBlock(ctx context.Context, id int, block *block.Block) error {
 	key := fmt.Sprintf(blockKeyFormat, id)
 	return c.client.Set(ctx, key, block.JSON(), 0).Err()
 }
