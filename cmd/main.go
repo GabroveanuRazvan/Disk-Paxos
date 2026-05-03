@@ -1,7 +1,16 @@
 package main
 
-import "fmt"
+import (
+	"disk-paxos/internal/config"
+	"fmt"
+	"log"
+)
 
 func main() {
-	fmt.Println("Hello world")
+
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Panic(err)
+	}
+	fmt.Println(cfg)
 }
