@@ -3,28 +3,39 @@ package main
 import (
 	"context"
 	"disk-paxos/internal/config"
+	"disk-paxos/internal/logger"
 	"disk-paxos/internal/processor"
 	"fmt"
-	"log"
+
+	"go.uber.org/zap"
 )
 
 func main() {
+	log, err := logger.NewConsoleLogger()
+	if err != nil {
+		panic(err)
+	}
+	defer log.Sync()
+
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Panic(err)
+		log.Fatal("", zap.Error(err))
 	}
-	fmt.Println(cfg)
 
-	p := processor.NewProcessor(1, cfg)
+	p := processor.NewProcessor(1, cfg, log)
 	if err := p.WriteToDisks(context.Background()); err != nil {
-		log.Panic(err)
+		log.Fatal("", zap.Error(err))
 	}
 
 	for i := range 3 {
 		value := fmt.Sprintf("value %d", i)
-		if err := p.Propose(value); err != nil {
-			log.Println(err)
+		val, err := p.Propose(value)
+		if err != nil {
+			log.Fatal("", zap.Error(err))
+
 		}
+
+		log.Info("", zap.Any("value", val))
 
 	}
 

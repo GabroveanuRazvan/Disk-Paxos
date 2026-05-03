@@ -5,5 +5,5 @@ services:
       replicas: ${DISK_COUNT:-1}
     ports:
       # The port mapping needs to be made manually
-      - "6379-6399:6379"
+      - "6379-6381:6379"
 #    command: redis-server --appendonly yes

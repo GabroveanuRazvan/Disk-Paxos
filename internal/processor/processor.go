@@ -5,41 +5,45 @@ import (
 	"disk-paxos/internal/block"
 	"disk-paxos/internal/config"
 	"disk-paxos/internal/disk"
+	"errors"
 	"fmt"
-	"log"
 	"sync"
+
+	"go.uber.org/zap"
 )
 
-const blockKeyFormat = "block-%d"
+var (
+	ErrPhase1Preempted = errors.New("aborted: higher ballot found in phase 1")
+	ErrPhase2Preempted = errors.New("aborted: higher ballot found in phase 2")
+)
 
 type Processor struct {
-	ID    int
-	cfg   *config.Config
-	block *block.Block
+	ID     int
+	cfg    *config.Config
+	block  *block.Block
+	logger *zap.Logger
 }
 
-func NewProcessor(id int, cfg *config.Config) *Processor {
+func NewProcessor(id int, cfg *config.Config, logger *zap.Logger) *Processor {
 	blk := &block.Block{
 		Mbal: 0,
 		Bal:  0,
 	}
+	logg := logger.With(zap.Int("processor", id))
 
 	return &Processor{
-		ID:    id,
-		cfg:   cfg,
-		block: blk,
+		ID:     id,
+		cfg:    cfg,
+		block:  blk,
+		logger: logg,
 	}
-}
-
-func (p *Processor) BlockID() string {
-	return fmt.Sprintf(blockKeyFormat, p.ID)
 }
 
 func (p *Processor) NextBallot() int {
 	return p.block.Mbal + p.ID
 }
 
-func (p *Processor) Propose(value string) error {
+func (p *Processor) Propose(value string) (string, error) {
 
 	// ==========================================
 	// PHASE 1: The Scout
@@ -49,13 +53,15 @@ func (p *Processor) Propose(value string) error {
 	p.block.Mbal = p.NextBallot()
 	ctx := context.Background()
 
+	p.logger.Debug("Proposing", zap.String("value", value), zap.Int("ballot", p.block.Mbal))
+
 	if err := p.WriteToDisks(ctx); err != nil {
-		return err
+		return "", err
 	}
 
 	allBlocks, err := p.ReadFromDisks(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	highestBal := 0
@@ -63,11 +69,11 @@ func (p *Processor) Propose(value string) error {
 
 	for _, blk := range allBlocks {
 		if blk.Mbal > p.block.Mbal {
-			return fmt.Errorf("aborted in phase 1, higher mbal %d found", blk.Mbal)
+			return "", fmt.Errorf("%w: %d", ErrPhase1Preempted, blk.Mbal)
 		}
 
 		// Adoption check
-		if blk.Mbal > highestBal {
+		if blk.Bal > highestBal {
 			highestBal = blk.Mbal
 			proposalValue = blk.Inp
 		}
@@ -81,25 +87,26 @@ func (p *Processor) Propose(value string) error {
 	p.block.Inp = proposalValue // either my value or the adopted value
 
 	if err = p.WriteToDisks(ctx); err != nil {
-		return err
+		return "", err
 	}
 
 	finalBlocks, err := p.ReadFromDisks(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	for _, blk := range finalBlocks {
 		if blk.Mbal > p.block.Mbal {
-			return fmt.Errorf("aborted in phase 2, higher mbal %d found", blk.Mbal)
+			return "", fmt.Errorf("%w: %d", ErrPhase2Preempted, blk.Mbal)
 		}
 	}
 
-	log.Printf("Consensus reached for value %s\n", proposalValue)
-	return nil
+	p.logger.Info("Consensus reached", zap.String("value", p.block.Inp))
+	return p.block.Inp, nil
 }
 
 func (p *Processor) WriteToDisks(ctx context.Context) error {
+	p.logger.Debug("Writing to disks")
 	wg := new(sync.WaitGroup)
 
 	for i := range p.cfg.DiskCount {
@@ -110,7 +117,7 @@ func (p *Processor) WriteToDisks(ctx context.Context) error {
 			defer client.Close()
 
 			if err := client.SetBlock(ctx, p.ID, p.block); err != nil {
-				log.Println("Set error", err)
+				p.logger.Warn("Failed to write block", zap.Error(err))
 				return
 			}
 
@@ -123,6 +130,7 @@ func (p *Processor) WriteToDisks(ctx context.Context) error {
 }
 
 func (p *Processor) ReadFromDisks(ctx context.Context) ([]*block.Block, error) {
+	p.logger.Debug("Reading from disks")
 	wg := new(sync.WaitGroup)
 
 	blocks := make([]*block.Block, 0)
@@ -136,7 +144,7 @@ func (p *Processor) ReadFromDisks(ctx context.Context) ([]*block.Block, error) {
 
 			currentBlk, err := client.ReadAllBlocks(ctx)
 			if err != nil {
-				log.Println("Read blocks error:", err)
+				p.logger.Warn("Read all blocks error", zap.Error(err))
 				return
 			}
 
