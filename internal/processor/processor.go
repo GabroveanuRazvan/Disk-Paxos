@@ -102,7 +102,7 @@ func (p *Processor) Propose(value string) error {
 func (p *Processor) WriteToDisks(ctx context.Context) error {
 	wg := new(sync.WaitGroup)
 
-	for i := 0; i < p.cfg.DiskCount; i++ {
+	for i := range p.cfg.DiskCount {
 		addr := p.cfg.DiskAddresses[i]
 
 		wg.Go(func() {
@@ -128,7 +128,7 @@ func (p *Processor) ReadFromDisks(ctx context.Context) ([]*block.Block, error) {
 	blocks := make([]*block.Block, 0)
 	var blkMu sync.Mutex
 
-	for i := 0; i < p.cfg.DiskCount; i++ {
+	for i := range p.cfg.DiskCount {
 		addr := p.cfg.DiskAddresses[i]
 
 		wg.Go(func() {

@@ -34,7 +34,7 @@ func (c *Client) SetBlock(ctx context.Context, id int, block *block.Block) error
 
 func (c *Client) ReadBlocks(ctx context.Context, ids ...int) ([]*block.Block, error) {
 	keys := make([]string, 0, len(ids))
-	for i := 0; i < len(ids); i++ {
+	for i := range len(ids) {
 		keys = append(keys, fmt.Sprintf(blockKeyFormat, ids[i]))
 	}
 
@@ -62,11 +62,25 @@ func (c *Client) ReadBlocks(ctx context.Context, ids ...int) ([]*block.Block, er
 
 func (c *Client) ReadAllBlocks(ctx context.Context) ([]*block.Block, error) {
 	ids := make([]int, 0, c.cfg.ProcessorCount)
-	for i := 0; i < c.cfg.ProcessorCount; i++ {
-		ids = append(ids, i)
+	for i := range c.cfg.ProcessorCount {
+		ids = append(ids, i+1)
 	}
 
 	return c.ReadBlocks(ctx, ids...)
+}
+
+func (c *Client) DeleteAllBlocks(ctx context.Context) error {
+	ids := make([]int, 0, c.cfg.ProcessorCount)
+	for i := 0; i < c.cfg.ProcessorCount; i++ {
+		ids = append(ids, i+1)
+	}
+
+	keys := make([]string, 0, len(ids))
+	for i := range len(ids) {
+		keys = append(keys, fmt.Sprintf(blockKeyFormat, ids[i]))
+	}
+
+	return c.client.Del(ctx, keys...).Err()
 }
 
 func (c *Client) Close() error {
