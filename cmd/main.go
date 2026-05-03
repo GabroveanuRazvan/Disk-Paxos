@@ -1,13 +1,13 @@
 package main
 
 import (
-	"disk-paxos/internal/config"
 	"fmt"
 	"log"
+
+	"disk-paxos/internal/config"
 )
 
 func main() {
-
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Panic(err)
