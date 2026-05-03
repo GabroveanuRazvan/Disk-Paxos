@@ -32,13 +32,41 @@ func (c *Client) SetBlock(ctx context.Context, id int, block *block.Block) error
 	return c.client.Set(ctx, key, block.JSON(), 0).Err()
 }
 
-func (c *Client) ReadBlocks(ctx context.Context, ids ...int) ([]interface{}, error) {
+func (c *Client) ReadBlocks(ctx context.Context, ids ...int) ([]*block.Block, error) {
 	keys := make([]string, 0, len(ids))
 	for i := 0; i < len(ids); i++ {
 		keys = append(keys, fmt.Sprintf(blockKeyFormat, ids[i]))
 	}
 
-	return c.client.MGet(ctx, keys...).Result()
+	data, err := c.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	blocks := make([]*block.Block, 0, len(data))
+
+	for _, res := range data {
+		if res == nil {
+			continue
+		}
+
+		blk := new(block.Block)
+		strBlk := res.(string)
+		blk.FromJSON(strBlk)
+
+		blocks = append(blocks, blk)
+	}
+
+	return blocks, nil
+}
+
+func (c *Client) ReadAllBlocks(ctx context.Context) ([]*block.Block, error) {
+	ids := make([]int, 0, c.cfg.ProcessorCount)
+	for i := 0; i < c.cfg.ProcessorCount; i++ {
+		ids = append(ids, i)
+	}
+
+	return c.ReadBlocks(ctx, ids...)
 }
 
 func (c *Client) Close() error {

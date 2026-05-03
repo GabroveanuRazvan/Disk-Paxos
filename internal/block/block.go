@@ -15,3 +15,7 @@ func (p *Block) JSON() string {
 	}
 	return string(b)
 }
+
+func (p *Block) FromJSON(jsonBlk string) {
+	_ = json.Unmarshal([]byte(jsonBlk), p)
+}

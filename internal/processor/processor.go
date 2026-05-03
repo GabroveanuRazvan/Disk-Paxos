@@ -19,7 +19,7 @@ type Processor struct {
 }
 
 func NewProcessor(id int, cfg *config.Config) *Processor {
-	block := &block.Block{
+	blk := &block.Block{
 		Mbal: 0,
 		Bal:  0,
 	}
@@ -27,7 +27,7 @@ func NewProcessor(id int, cfg *config.Config) *Processor {
 	return &Processor{
 		ID:    id,
 		cfg:   cfg,
-		block: block,
+		block: blk,
 	}
 }
 
@@ -47,13 +47,55 @@ func (p *Processor) Propose(value string) error {
 
 	p.block.Inp = value
 	p.block.Mbal = p.NextBallot()
-
 	ctx := context.Background()
 
 	if err := p.WriteToDisks(ctx); err != nil {
 		return err
 	}
 
+	allBlocks, err := p.ReadFromDisks(ctx)
+	if err != nil {
+		return err
+	}
+
+	highestBal := 0
+	proposalValue := value
+
+	for _, blk := range allBlocks {
+		if blk.Mbal > p.block.Mbal {
+			return fmt.Errorf("aborted in phase 1, higher mbal %d found", blk.Mbal)
+		}
+
+		// Adoption check
+		if blk.Mbal > highestBal {
+			highestBal = blk.Mbal
+			proposalValue = blk.Inp
+		}
+	}
+
+	// ==========================================
+	// PHASE 2: The Commit
+	// ==========================================
+
+	p.block.Bal = p.block.Mbal
+	p.block.Inp = proposalValue // either my value or the adopted value
+
+	if err = p.WriteToDisks(ctx); err != nil {
+		return err
+	}
+
+	finalBlocks, err := p.ReadFromDisks(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, blk := range finalBlocks {
+		if blk.Mbal > p.block.Mbal {
+			return fmt.Errorf("aborted in phase 2, higher mbal %d found", blk.Mbal)
+		}
+	}
+
+	log.Printf("Consensus reached for value %s\n", proposalValue)
 	return nil
 }
 
@@ -80,20 +122,31 @@ func (p *Processor) WriteToDisks(ctx context.Context) error {
 	return nil
 }
 
-func (p *Processor) ReadFromDisks(ctx context.Context) error {
+func (p *Processor) ReadFromDisks(ctx context.Context) ([]*block.Block, error) {
 	wg := new(sync.WaitGroup)
 
-	blockKeys := make([]string, 0, p.cfg.ProcessorCount)
-
-	for i := 0; i < p.cfg.ProcessorCount; i++ {
-		blockKeys = append(blockKeys, fmt.Sprintf(blockKeyFormat, i))
-	}
+	blocks := make([]*block.Block, 0)
+	var blkMu sync.Mutex
 
 	for i := 0; i < p.cfg.DiskCount; i++ {
 		addr := p.cfg.DiskAddresses[i]
-		// TODO
-	}
 
+		wg.Go(func() {
+			client := disk.NewClient(p.cfg, addr)
+
+			currentBlk, err := client.ReadAllBlocks(ctx)
+			if err != nil {
+				log.Println("Read blocks error:", err)
+				return
+			}
+
+			blkMu.Lock()
+			defer blkMu.Unlock()
+			blocks = append(blocks, currentBlk...)
+		})
+
+	}
 	wg.Wait()
-	return nil
+
+	return blocks, nil
 }
