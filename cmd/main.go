@@ -2,10 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
+
 	"disk-paxos/internal/config"
 	"disk-paxos/internal/logger"
 	"disk-paxos/internal/processor"
-	"fmt"
 
 	"go.uber.org/zap"
 )
@@ -32,11 +33,9 @@ func main() {
 		val, err := p.Propose(value)
 		if err != nil {
 			log.Fatal("", zap.Error(err))
-
 		}
 
 		log.Info("", zap.Any("value", val))
 
 	}
-
 }

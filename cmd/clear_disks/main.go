@@ -2,10 +2,11 @@ package main
 
 import (
 	"context"
-	"disk-paxos/internal/config"
-	"disk-paxos/internal/disk"
 	"fmt"
 	"log"
+
+	"disk-paxos/internal/config"
+	"disk-paxos/internal/disk"
 )
 
 func main() {

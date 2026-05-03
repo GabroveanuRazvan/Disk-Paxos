@@ -2,12 +2,13 @@ package processor
 
 import (
 	"context"
-	"disk-paxos/internal/block"
-	"disk-paxos/internal/config"
-	"disk-paxos/internal/disk"
 	"errors"
 	"fmt"
 	"sync"
+
+	"disk-paxos/internal/block"
+	"disk-paxos/internal/config"
+	"disk-paxos/internal/disk"
 
 	"go.uber.org/zap"
 )
@@ -18,10 +19,11 @@ var (
 )
 
 type Processor struct {
-	ID     int
-	cfg    *config.Config
-	block  *block.Block
-	logger *zap.Logger
+	ID      int
+	cfg     *config.Config
+	block   *block.Block
+	logger  *zap.Logger
+	clients []*disk.Client
 }
 
 func NewProcessor(id int, cfg *config.Config, logger *zap.Logger) *Processor {
@@ -31,11 +33,18 @@ func NewProcessor(id int, cfg *config.Config, logger *zap.Logger) *Processor {
 	}
 	logg := logger.With(zap.Int("processor", id))
 
+	clients := make([]*disk.Client, 0, cfg.DiskCount)
+	for _, addr := range cfg.DiskAddresses {
+		client := disk.NewClient(cfg, addr)
+		clients = append(clients, client)
+	}
+
 	return &Processor{
-		ID:     id,
-		cfg:    cfg,
-		block:  blk,
-		logger: logg,
+		ID:      id,
+		cfg:     cfg,
+		block:   blk,
+		logger:  logg,
+		clients: clients,
 	}
 }
 
@@ -44,7 +53,6 @@ func (p *Processor) NextBallot() int {
 }
 
 func (p *Processor) Propose(value string) (string, error) {
-
 	// ==========================================
 	// PHASE 1: The Scout
 	// ==========================================
@@ -74,7 +82,7 @@ func (p *Processor) Propose(value string) (string, error) {
 
 		// Adoption check
 		if blk.Bal > highestBal {
-			highestBal = blk.Mbal
+			highestBal = blk.Bal
 			proposalValue = blk.Inp
 		}
 	}
@@ -110,17 +118,14 @@ func (p *Processor) WriteToDisks(ctx context.Context) error {
 	wg := new(sync.WaitGroup)
 
 	for i := range p.cfg.DiskCount {
-		addr := p.cfg.DiskAddresses[i]
 
 		wg.Go(func() {
-			client := disk.NewClient(p.cfg, addr)
-			defer client.Close()
+			client := p.clients[i]
 
 			if err := client.SetBlock(ctx, p.ID, p.block); err != nil {
 				p.logger.Warn("Failed to write block", zap.Error(err))
 				return
 			}
-
 		})
 
 	}
@@ -137,10 +142,9 @@ func (p *Processor) ReadFromDisks(ctx context.Context) ([]*block.Block, error) {
 	var blkMu sync.Mutex
 
 	for i := range p.cfg.DiskCount {
-		addr := p.cfg.DiskAddresses[i]
 
 		wg.Go(func() {
-			client := disk.NewClient(p.cfg, addr)
+			client := p.clients[i]
 
 			currentBlk, err := client.ReadAllBlocks(ctx)
 			if err != nil {
@@ -157,4 +161,10 @@ func (p *Processor) ReadFromDisks(ctx context.Context) ([]*block.Block, error) {
 	wg.Wait()
 
 	return blocks, nil
+}
+
+func (p *Processor) Close() {
+	for _, client := range p.clients {
+		_ = client.Close()
+	}
 }

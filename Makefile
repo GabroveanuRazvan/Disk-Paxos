@@ -1,4 +1,4 @@
-.PHONY: run clear up down
+.PHONY: run clear up down fumpt
 
 
 run:
@@ -15,3 +15,6 @@ up:
 # Stop the redis disks
 down:
 	docker compose down
+
+fumpt:
+	gofumpt -w .
