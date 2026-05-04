@@ -2,27 +2,26 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
-
 	"disk-paxos/internal/config"
 	"disk-paxos/internal/disk"
+	"disk-paxos/internal/logger"
+
+	"go.uber.org/zap"
 )
 
 func main() {
+	log, err := logger.NewConsoleLogger()
+	if err != nil {
+		panic(err)
+	}
+
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Panic(err)
+		log.Fatal("", zap.Error(err))
 	}
 
 	ctx := context.Background()
-	for _, addr := range cfg.DiskAddresses {
-		client := disk.NewClient(cfg, addr)
-		if err = client.DeleteAllBlocks(ctx); err != nil {
-			fmt.Errorf("%w", err)
-		}
-		client.Close()
-	}
+	disk.PurgeAllBlocks(ctx, cfg, log)
 
-	fmt.Println("Successfully cleared all disks")
+	log.Info("Successfully cleared all blocks")
 }

@@ -10,6 +10,7 @@ type Config struct {
 	ProcessorCount int      `mapstructure:"PROCESSOR_COUNT"`
 	DiskCount      int      `mapstructure:"DISK_COUNT"`
 	DiskAddresses  []string `mapstructure:"DISK_ADDRESSES"`
+	Retries        int      `mapstructure:"RETRIES"`
 }
 
 func setDefaults() {
@@ -20,6 +21,7 @@ func setDefaults() {
 		"localhost:6380",
 		"localhost:6381",
 	})
+	viper.SetDefault("RETRIES", 3)
 }
 
 func LoadConfig() (*Config, error) {
@@ -51,12 +53,19 @@ func validate(cfg *Config) error {
 	addrSet := make(map[string]struct{})
 
 	for _, addr := range cfg.DiskAddresses {
-
 		_, exists := addrSet[addr]
 		if exists {
 			return fmt.Errorf("duplicate disk address: %s", addr)
 		}
 		addrSet[addr] = struct{}{}
+	}
+
+	if cfg.Retries < 1 {
+		return fmt.Errorf("invalid retries: %d", cfg.Retries)
+	}
+
+	if cfg.DiskCount%2 == 0 {
+		return fmt.Errorf("even number of disks: %d", cfg.DiskCount)
 	}
 
 	return nil

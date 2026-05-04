@@ -20,6 +20,7 @@ var (
 	ErrQuorumNotReached = errors.New("quorum not reached")
 )
 
+// Processor is our proposer in the algorithm
 type Processor struct {
 	ID      int
 	cfg     *config.Config
@@ -29,17 +30,21 @@ type Processor struct {
 }
 
 func NewProcessor(id int, cfg *config.Config, logger *zap.Logger) *Processor {
-	blk := &block.Block{
-		Mbal: 0,
-		Bal:  0,
-	}
+	blk := new(block.Block)
 	logg := logger.With(zap.Int("processor", id))
 
-	clients := make([]*disk.Client, 0, cfg.DiskCount)
-	for _, addr := range cfg.DiskAddresses {
-		client := disk.NewClient(cfg, addr)
-		clients = append(clients, client)
+	return &Processor{
+		ID:      id,
+		cfg:     cfg,
+		Block:   blk,
+		logger:  logg,
+		clients: disk.NewClients(cfg),
 	}
+}
+
+func NewProcessorWithClients(id int, cfg *config.Config, logger *zap.Logger, clients ...*disk.Client) *Processor {
+	blk := new(block.Block)
+	logg := logger.With(zap.Int("processor", id))
 
 	return &Processor{
 		ID:      id,
@@ -63,21 +68,23 @@ func (p *Processor) NextBallot() int {
 	return p.Block.Mbal + p.ID
 }
 
-func (p *Processor) Propose(value string) (string, error) {
+func (p *Processor) Propose(ctx context.Context, value string) (string, error) {
 	// ==========================================
 	// PHASE 1: The Scout
 	// ==========================================
 
+	// Update our local block to the desired value, generate the next ballot number
 	p.Block.Inp = value
 	p.Block.Mbal = p.NextBallot()
-	ctx := context.Background()
 
 	p.logger.Debug("Proposing", zap.String("value", value), zap.Int("ballot", p.Block.Mbal))
 
+	// Write our current block to all disks
 	if err := p.WriteToDisks(ctx); err != nil {
 		return "", err
 	}
 
+	// Read check all the blocks from the disks
 	allBlocks, err := p.ReadFromDisks(ctx)
 	if err != nil {
 		return "", err
@@ -87,12 +94,14 @@ func (p *Processor) Propose(value string) (string, error) {
 	proposalValue := value
 
 	for _, blk := range allBlocks {
+
+		// Higher mbal than our block, we got preempted in phase 1
 		if blk.Mbal > p.Block.Mbal {
 			p.Block.Mbal = blk.Mbal
 			return "", fmt.Errorf("%w: %d", ErrPhase1Preempted, blk.Mbal)
 		}
 
-		// Adoption check
+		// Adoption check; update bal to highest bal and adopt the new proposal value
 		if blk.Bal > highestBal {
 			highestBal = blk.Bal
 			proposalValue = blk.Inp
@@ -103,13 +112,16 @@ func (p *Processor) Propose(value string) (string, error) {
 	// PHASE 2: The Commit
 	// ==========================================
 
+	// Did not get preempted in phase 1, try to commit this block
 	p.Block.Bal = p.Block.Mbal
 	p.Block.Inp = proposalValue // either my value or the adopted value
 
+	// Write the new block to all disks
 	if err = p.WriteToDisks(ctx); err != nil {
 		return "", err
 	}
 
+	// Final preemption check
 	finalBlocks, err := p.ReadFromDisks(ctx)
 	if err != nil {
 		return "", err
@@ -117,6 +129,7 @@ func (p *Processor) Propose(value string) (string, error) {
 
 	for _, blk := range finalBlocks {
 		if blk.Mbal > p.Block.Mbal {
+			p.Block.Mbal = blk.Mbal
 			return "", fmt.Errorf("%w: %d", ErrPhase2Preempted, blk.Mbal)
 		}
 	}
@@ -125,12 +138,14 @@ func (p *Processor) Propose(value string) (string, error) {
 	return p.Block.Inp, nil
 }
 
+// WriteToDisks writes the blocks in parallel to all disks.
+// Fails if quorum is not reached.
 func (p *Processor) WriteToDisks(ctx context.Context) error {
 	p.logger.Debug("Writing to disks")
 	wg := new(sync.WaitGroup)
 	var successCount atomic.Int32
-	for i := range p.cfg.DiskCount {
 
+	for i := range p.cfg.DiskCount {
 		wg.Go(func() {
 			client := p.clients[i]
 			if err := client.SetBlock(ctx, p.ID, p.Block); err != nil {
@@ -150,6 +165,8 @@ func (p *Processor) WriteToDisks(ctx context.Context) error {
 	return nil
 }
 
+// ReadFromDisks reads the blocks in parallel to all disks.
+// Fails if quorum is not reached.
 func (p *Processor) ReadFromDisks(ctx context.Context) ([]*block.Block, error) {
 	p.logger.Debug("Reading from disks")
 	wg := new(sync.WaitGroup)

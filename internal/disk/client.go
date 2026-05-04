@@ -8,10 +8,12 @@ import (
 	"disk-paxos/internal/config"
 
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 )
 
 const blockKeyFormat = "block-%d"
 
+// Client is a wrapper over a redis client, used as our disk needed for the algorithm.
 type Client struct {
 	cfg    *config.Config
 	client *redis.Client
@@ -28,11 +30,23 @@ func NewClient(cfg *config.Config, addr string) *Client {
 	}
 }
 
+// NewClients creates all clients for the current config
+func NewClients(cfg *config.Config) []*Client {
+	clients := make([]*Client, 0, cfg.DiskCount)
+	for _, addr := range cfg.DiskAddresses {
+		client := NewClient(cfg, addr)
+		clients = append(clients, client)
+	}
+	return clients
+}
+
+// SetBlock sets the block as a JSON string for the current id.
 func (c *Client) SetBlock(ctx context.Context, id int, block *block.Block) error {
 	key := fmt.Sprintf(blockKeyFormat, id)
 	return c.client.Set(ctx, key, block.JSON(), 0).Err()
 }
 
+// ReadBlocks reads all blocks for the provided ids.
 func (c *Client) ReadBlocks(ctx context.Context, ids ...int) ([]*block.Block, error) {
 	keys := make([]string, 0, len(ids))
 	for _, id := range ids {
@@ -61,6 +75,7 @@ func (c *Client) ReadBlocks(ctx context.Context, ids ...int) ([]*block.Block, er
 	return blocks, nil
 }
 
+// ReadAllBlocks reads all blocks for all ids.
 func (c *Client) ReadAllBlocks(ctx context.Context) ([]*block.Block, error) {
 	ids := make([]int, 0, c.cfg.ProcessorCount)
 	for i := range c.cfg.ProcessorCount {
@@ -70,6 +85,7 @@ func (c *Client) ReadAllBlocks(ctx context.Context) ([]*block.Block, error) {
 	return c.ReadBlocks(ctx, ids...)
 }
 
+// DeleteAllBlocks deletes all blocks for all ids.
 func (c *Client) DeleteAllBlocks(ctx context.Context) error {
 	keys := make([]string, 0, c.cfg.ProcessorCount)
 	for i := range c.cfg.ProcessorCount {
@@ -81,4 +97,15 @@ func (c *Client) DeleteAllBlocks(ctx context.Context) error {
 
 func (c *Client) Close() error {
 	return c.client.Close()
+}
+
+// PurgeAllBlocks deletes all blocks for all disks.
+func PurgeAllBlocks(ctx context.Context, cfg *config.Config, logger *zap.Logger) {
+	clients := NewClients(cfg)
+
+	for i, client := range clients {
+		if err := client.DeleteAllBlocks(ctx); err != nil {
+			logger.Warn("Failed to delete all disk blocks", zap.Int("index", i))
+		}
+	}
 }
