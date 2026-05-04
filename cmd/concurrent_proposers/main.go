@@ -10,8 +10,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const ProposerCount = 16
-
 func main() {
 	log, err := logger.NewConsoleLogger()
 	if err != nil {
@@ -25,8 +23,8 @@ func main() {
 	}
 
 	wg := new(sync.WaitGroup)
-	
-	for i := range ProposerCount {
+
+	for i := range cfg.ProcessorCount {
 
 		id := i + 1
 		value := fmt.Sprintf("value %d", id)

@@ -2,7 +2,7 @@
 
 
 run:
-	go run cmd/main.go
+	go run cmd/concurrent_proposers/main.go
 
 # Clear the disks
 clear:
