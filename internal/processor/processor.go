@@ -23,7 +23,7 @@ var (
 type Processor struct {
 	ID      int
 	cfg     *config.Config
-	block   *block.Block
+	Block   *block.Block
 	logger  *zap.Logger
 	clients []*disk.Client
 }
@@ -44,7 +44,7 @@ func NewProcessor(id int, cfg *config.Config, logger *zap.Logger) *Processor {
 	return &Processor{
 		ID:      id,
 		cfg:     cfg,
-		block:   blk,
+		Block:   blk,
 		logger:  logg,
 		clients: clients,
 	}
@@ -55,12 +55,12 @@ func (p *Processor) NextBallot() int {
 	n := p.cfg.ProcessorCount
 	// mbal - last processor ID that commited this mbal + this processor ID
 	// results in the nearest multiple of N; the multiplier being the round number
-	b := p.block.Mbal - (p.block.Mbal % n) + p.ID
+	b := p.Block.Mbal - (p.Block.Mbal % n) + p.ID
 	// If the mbal is smaller advance to the next round => add N
-	if b <= p.block.Mbal {
+	if b <= p.Block.Mbal {
 		b += n
 	}
-	return p.block.Mbal + p.ID
+	return p.Block.Mbal + p.ID
 }
 
 func (p *Processor) Propose(value string) (string, error) {
@@ -68,11 +68,11 @@ func (p *Processor) Propose(value string) (string, error) {
 	// PHASE 1: The Scout
 	// ==========================================
 
-	p.block.Inp = value
-	p.block.Mbal = p.NextBallot()
+	p.Block.Inp = value
+	p.Block.Mbal = p.NextBallot()
 	ctx := context.Background()
 
-	p.logger.Debug("Proposing", zap.String("value", value), zap.Int("ballot", p.block.Mbal))
+	p.logger.Debug("Proposing", zap.String("value", value), zap.Int("ballot", p.Block.Mbal))
 
 	if err := p.WriteToDisks(ctx); err != nil {
 		return "", err
@@ -87,8 +87,8 @@ func (p *Processor) Propose(value string) (string, error) {
 	proposalValue := value
 
 	for _, blk := range allBlocks {
-		if blk.Mbal > p.block.Mbal {
-			p.block.Mbal = blk.Mbal
+		if blk.Mbal > p.Block.Mbal {
+			p.Block.Mbal = blk.Mbal
 			return "", fmt.Errorf("%w: %d", ErrPhase1Preempted, blk.Mbal)
 		}
 
@@ -103,8 +103,8 @@ func (p *Processor) Propose(value string) (string, error) {
 	// PHASE 2: The Commit
 	// ==========================================
 
-	p.block.Bal = p.block.Mbal
-	p.block.Inp = proposalValue // either my value or the adopted value
+	p.Block.Bal = p.Block.Mbal
+	p.Block.Inp = proposalValue // either my value or the adopted value
 
 	if err = p.WriteToDisks(ctx); err != nil {
 		return "", err
@@ -116,13 +116,13 @@ func (p *Processor) Propose(value string) (string, error) {
 	}
 
 	for _, blk := range finalBlocks {
-		if blk.Mbal > p.block.Mbal {
+		if blk.Mbal > p.Block.Mbal {
 			return "", fmt.Errorf("%w: %d", ErrPhase2Preempted, blk.Mbal)
 		}
 	}
 
-	p.logger.Info("Consensus reached", zap.String("value", p.block.Inp))
-	return p.block.Inp, nil
+	p.logger.Info("Consensus reached", zap.String("value", p.Block.Inp))
+	return p.Block.Inp, nil
 }
 
 func (p *Processor) WriteToDisks(ctx context.Context) error {
@@ -133,7 +133,7 @@ func (p *Processor) WriteToDisks(ctx context.Context) error {
 
 		wg.Go(func() {
 			client := p.clients[i]
-			if err := client.SetBlock(ctx, p.ID, p.block); err != nil {
+			if err := client.SetBlock(ctx, p.ID, p.Block); err != nil {
 				p.logger.Warn("Failed to write block", zap.Error(err))
 				return
 			}
