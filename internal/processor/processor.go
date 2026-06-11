@@ -65,7 +65,7 @@ func (p *Processor) NextBallot() int {
 	if b <= p.Block.Mbal {
 		b += n
 	}
-	return p.Block.Mbal + p.ID
+	return b
 }
 
 func (p *Processor) Propose(ctx context.Context, value string) (string, error) {
@@ -172,6 +172,7 @@ func (p *Processor) ReadFromDisks(ctx context.Context) ([]*block.Block, error) {
 	wg := new(sync.WaitGroup)
 	blocks := make([]*block.Block, 0)
 	var blkMu sync.Mutex
+	var successCount atomic.Int32
 
 	for i := range p.cfg.DiskCount {
 
@@ -184,6 +185,8 @@ func (p *Processor) ReadFromDisks(ctx context.Context) ([]*block.Block, error) {
 				return
 			}
 
+			successCount.Add(1)
+
 			blkMu.Lock()
 			defer blkMu.Unlock()
 			blocks = append(blocks, currentBlk...)
@@ -192,7 +195,7 @@ func (p *Processor) ReadFromDisks(ctx context.Context) ([]*block.Block, error) {
 	}
 	wg.Wait()
 
-	if len(blocks) < p.cfg.DiskCount/2+1 {
+	if successCount.Load() < int32(p.cfg.DiskCount/2+1) {
 		return []*block.Block{}, ErrQuorumNotReached
 	}
 
