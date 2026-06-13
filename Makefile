@@ -1,4 +1,4 @@
-.PHONY: run clear up down fumpt
+.PHONY: run clear up down fumpt test test-table test-race test-integration test-all
 
 
 run:
@@ -18,3 +18,21 @@ down:
 
 fumpt:
 	gofumpt -w .
+
+# Run the regular unit/table tests.
+test:
+	go test -count=1 ./...
+
+# Alias for the regular table-driven/unit test suite.
+test-table: test
+
+# Run tests with the Go race detector.
+test-race:
+	go test -count=1 -race ./...
+
+# Run tests that require external services through testcontainers.
+test-integration:
+	go test -count=1 -tags=integration ./...
+
+# Run all local and integration test suites.
+test-all: test test-race test-integration

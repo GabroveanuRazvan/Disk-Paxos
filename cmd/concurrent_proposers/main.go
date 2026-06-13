@@ -43,7 +43,7 @@ func main() {
 
 }
 
-func setup() (cfg *config.Config, log *zap.Logger, clients []*disk.Client) {
+func setup() (cfg *config.Config, log *zap.Logger, clients []processor.Store) {
 	log, err := logger.NewConsoleLogger()
 	if err != nil {
 		panic(err)
@@ -53,6 +53,8 @@ func setup() (cfg *config.Config, log *zap.Logger, clients []*disk.Client) {
 	if err != nil {
 		log.Fatal("", zap.Error(err))
 	}
-	clients = disk.NewClients(cfg)
+	for _, client := range disk.NewClients(cfg) {
+		clients = append(clients, client)
+	}
 	return
 }

@@ -36,7 +36,7 @@ type Processor struct {
 	Block   *block.Block
 	Phase   Phase
 	logger  *zap.Logger
-	clients []*disk.Client
+	clients []Store
 }
 
 func NewProcessor(id int, cfg *config.Config, logger *zap.Logger) *Processor {
@@ -49,11 +49,11 @@ func NewProcessor(id int, cfg *config.Config, logger *zap.Logger) *Processor {
 		Block:   blk,
 		Phase:   PhaseRecovery,
 		logger:  logg,
-		clients: disk.NewClients(cfg),
+		clients: redisClientsToStores(disk.NewClients(cfg)),
 	}
 }
 
-func NewProcessorWithClients(id int, cfg *config.Config, logger *zap.Logger, clients ...*disk.Client) *Processor {
+func NewProcessorWithClients(id int, cfg *config.Config, logger *zap.Logger, clients ...Store) *Processor {
 	blk := new(block.Block)
 	logg := logger.With(zap.Int("processor", id))
 
@@ -65,6 +65,14 @@ func NewProcessorWithClients(id int, cfg *config.Config, logger *zap.Logger, cli
 		logger:  logg,
 		clients: clients,
 	}
+}
+
+func redisClientsToStores(clients []*disk.Client) []Store {
+	stores := make([]Store, 0, len(clients))
+	for _, client := range clients {
+		stores = append(stores, client)
+	}
+	return stores
 }
 
 // NextBallot computes the next mbal value higher than the last registered mbal.
