@@ -1,5 +1,7 @@
 TLA_TOOLS := tools/tla2tools.jar
 TLC_WORKERS ?= auto
+TLC_CFG ?= MC_HDiskSynod.cfg
+TLC_SPEC ?= MC_HDiskSynod.tla
 
 .PHONY: run clear up down fumpt test test-table test-race test-integration test-all tla-tools tla-check tla-check-output
 
@@ -47,11 +49,11 @@ tla-tools:
 
 # Run TLC against the Disk Paxos model.
 tla-check: $(TLA_TOOLS)
-	cd tla && java -XX:+UseParallelGC -cp ../$(TLA_TOOLS) tlc2.TLC -workers $(TLC_WORKERS) -config MC_HDiskSynod.cfg MC_HDiskSynod.tla
+	cd tla && java -XX:+UseParallelGC -cp ../$(TLA_TOOLS) tlc2.TLC -workers $(TLC_WORKERS) -config $(TLC_CFG) $(TLC_SPEC)
 
 # Run TLC and save the output for the report.
 tla-check-output: $(TLA_TOOLS)
-	cd tla && java -XX:+UseParallelGC -cp ../$(TLA_TOOLS) tlc2.TLC -workers $(TLC_WORKERS) -config MC_HDiskSynod.cfg MC_HDiskSynod.tla | tee ../tlc-output.txt
+	cd tla && java -XX:+UseParallelGC -cp ../$(TLA_TOOLS) tlc2.TLC -workers $(TLC_WORKERS) -config $(TLC_CFG) $(TLC_SPEC) | tee ../tlc-output.txt
 
 $(TLA_TOOLS):
 	$(MAKE) tla-tools

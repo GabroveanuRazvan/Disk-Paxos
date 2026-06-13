@@ -1,0 +1,31 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 0 and seed -244407362144253446 with 16 workers on 16 cores with 10571MB heap and 64MB offheap memory [pid: 492364] (Linux 6.8.0-124-generic amd64, Ubuntu 21.0.11 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /home/razvan/GolandProjects/ConcurrentAlgsProject/Disk-Paxos/tla/MC_HDiskSynod.tla
+Parsing file /home/razvan/GolandProjects/ConcurrentAlgsProject/Disk-Paxos/tla/HDiskSynod.tla
+Parsing file /tmp/TLC.tla
+Parsing file /home/razvan/GolandProjects/ConcurrentAlgsProject/Disk-Paxos/tla/DiskSynod.tla
+Parsing file /home/razvan/GolandProjects/ConcurrentAlgsProject/Disk-Paxos/tla/Synod.tla
+Parsing file /tmp/FiniteSets.tla
+Parsing file /tmp/Naturals.tla
+Parsing file /tmp/Sequences.tla
+Semantic processing of module Naturals
+Semantic processing of module Synod
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module DiskSynod
+Semantic processing of module HDiskSynod
+Semantic processing of module TLC
+Semantic processing of module MC_HDiskSynod
+Starting... (2026-06-13 23:43:08)
+Computing initial states...
+Computed 2 initial states...
+Finished computing initial states: 4 distinct states generated at 2026-06-13 23:43:08.
+Model checking completed. No error has been found.
+  Estimates of the probability that TLC did not check all reachable states
+  because two distinct states had the same fingerprint:
+  calculated (optimistic):  val = 3.1E-10
+  based on the actual fingerprints:  val = 2.5E-11
+239642 states generated, 27178 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 31.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 6 and the 95th percentile is 3).
+Finished in 01s at (2026-06-13 23:43:09)
