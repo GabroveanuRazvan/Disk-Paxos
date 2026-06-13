@@ -20,11 +20,21 @@ var (
 	ErrQuorumNotReached = errors.New("quorum not reached")
 )
 
+type Phase int
+
+const (
+	PhaseRecovery Phase = iota
+	PhaseScout
+	PhaseCommit
+	PhaseDone
+)
+
 // Processor is our proposer in the algorithm
 type Processor struct {
 	ID      int
 	cfg     *config.Config
 	Block   *block.Block
+	Phase   Phase
 	logger  *zap.Logger
 	clients []*disk.Client
 }
@@ -37,6 +47,7 @@ func NewProcessor(id int, cfg *config.Config, logger *zap.Logger) *Processor {
 		ID:      id,
 		cfg:     cfg,
 		Block:   blk,
+		Phase:   PhaseRecovery,
 		logger:  logg,
 		clients: disk.NewClients(cfg),
 	}
@@ -50,6 +61,7 @@ func NewProcessorWithClients(id int, cfg *config.Config, logger *zap.Logger, cli
 		ID:      id,
 		cfg:     cfg,
 		Block:   blk,
+		Phase:   PhaseRecovery,
 		logger:  logg,
 		clients: clients,
 	}
@@ -70,12 +82,20 @@ func (p *Processor) NextBallot() int {
 
 func (p *Processor) Propose(ctx context.Context, value string) (string, error) {
 	// ==========================================
-	// PHASE 1: The Scout
+	// PHASE 0: The Recovery
 	// ==========================================
 
-	// Update our local block to the desired value, generate the next ballot number
-	p.Block.Inp = value
-	p.Block.Mbal = p.NextBallot()
+	if p.Phase == PhaseRecovery {
+		if err := p.Recover(ctx); err != nil {
+			return "", err
+		}
+	} else {
+		p.startBallot()
+	}
+
+	// ==========================================
+	// PHASE 1: The Scout
+	// ==========================================
 
 	p.logger.Debug("Proposing", zap.String("value", value), zap.Int("ballot", p.Block.Mbal))
 
@@ -84,20 +104,24 @@ func (p *Processor) Propose(ctx context.Context, value string) (string, error) {
 		return "", err
 	}
 
-	// Read check all the blocks from the disks
-	allBlocks, err := p.ReadFromDisks(ctx)
+	// Read check the other processors' blocks from the disks
+	allBlocks, err := p.ReadOtherBlocksFromDisks(ctx)
 	if err != nil {
 		return "", err
 	}
 
-	highestBal := 0
 	proposalValue := value
+	highestBal := p.Block.Bal
+	if p.Block.Bal > 0 {
+		proposalValue = p.Block.Inp
+	}
 
 	for _, blk := range allBlocks {
 
 		// Higher mbal than our block, we got preempted in phase 1
 		if blk.Mbal > p.Block.Mbal {
 			p.Block.Mbal = blk.Mbal
+			p.Phase = PhaseScout
 			return "", fmt.Errorf("%w: %d", ErrPhase1Preempted, blk.Mbal)
 		}
 
@@ -112,6 +136,8 @@ func (p *Processor) Propose(ctx context.Context, value string) (string, error) {
 	// PHASE 2: The Commit
 	// ==========================================
 
+	p.Phase = PhaseCommit
+
 	// Did not get preempted in phase 1, try to commit this block
 	p.Block.Bal = p.Block.Mbal
 	p.Block.Inp = proposalValue // either my value or the adopted value
@@ -122,7 +148,7 @@ func (p *Processor) Propose(ctx context.Context, value string) (string, error) {
 	}
 
 	// Final preemption check
-	finalBlocks, err := p.ReadFromDisks(ctx)
+	finalBlocks, err := p.ReadOtherBlocksFromDisks(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -134,8 +160,42 @@ func (p *Processor) Propose(ctx context.Context, value string) (string, error) {
 		}
 	}
 
+	p.Phase = PhaseDone
 	p.logger.Info("Consensus reached", zap.String("value", p.Block.Inp))
 	return p.Block.Inp, nil
+}
+
+func (p *Processor) startBallot() {
+	p.Phase = PhaseScout
+	p.Block.Mbal = p.NextBallot()
+}
+
+func (p *Processor) Recover(ctx context.Context) error {
+	p.logger.Debug("Recovering from disks")
+
+	ownBlocks, err := p.ReadOwnBlocksFromDisks(ctx)
+	if err != nil {
+		return err
+	}
+
+	maxMbal := p.Block.Mbal
+	recovered := *p.Block
+	for _, blk := range ownBlocks {
+		if blk.Mbal > maxMbal {
+			maxMbal = blk.Mbal
+		}
+		if blk.Bal > recovered.Bal {
+			recovered.Bal = blk.Bal
+			recovered.Inp = blk.Inp
+		}
+	}
+
+	p.Block.Mbal = maxMbal
+	p.Block.Bal = recovered.Bal
+	p.Block.Inp = recovered.Inp
+	p.startBallot()
+
+	return nil
 }
 
 // WriteToDisks writes the blocks in parallel to all disks.
@@ -168,6 +228,31 @@ func (p *Processor) WriteToDisks(ctx context.Context) error {
 // ReadFromDisks reads the blocks in parallel to all disks.
 // Fails if quorum is not reached.
 func (p *Processor) ReadFromDisks(ctx context.Context) ([]*block.Block, error) {
+	ids := make([]int, 0, p.cfg.ProcessorCount)
+	for i := range p.cfg.ProcessorCount {
+		ids = append(ids, i+1)
+	}
+
+	return p.readBlocksFromDisks(ctx, ids...)
+}
+
+func (p *Processor) ReadOwnBlocksFromDisks(ctx context.Context) ([]*block.Block, error) {
+	return p.readBlocksFromDisks(ctx, p.ID)
+}
+
+func (p *Processor) ReadOtherBlocksFromDisks(ctx context.Context) ([]*block.Block, error) {
+	ids := make([]int, 0, p.cfg.ProcessorCount-1)
+	for i := range p.cfg.ProcessorCount {
+		id := i + 1
+		if id != p.ID {
+			ids = append(ids, id)
+		}
+	}
+
+	return p.readBlocksFromDisks(ctx, ids...)
+}
+
+func (p *Processor) readBlocksFromDisks(ctx context.Context, ids ...int) ([]*block.Block, error) {
 	p.logger.Debug("Reading from disks")
 	wg := new(sync.WaitGroup)
 	blocks := make([]*block.Block, 0)
@@ -179,9 +264,9 @@ func (p *Processor) ReadFromDisks(ctx context.Context) ([]*block.Block, error) {
 		wg.Go(func() {
 			client := p.clients[i]
 
-			currentBlk, err := client.ReadAllBlocks(ctx)
+			currentBlk, err := client.ReadBlocks(ctx, ids...)
 			if err != nil {
-				p.logger.Warn("Read all blocks error", zap.Error(err))
+				p.logger.Warn("Read blocks error", zap.Error(err))
 				return
 			}
 

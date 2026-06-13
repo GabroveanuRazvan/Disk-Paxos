@@ -16,7 +16,7 @@ const blockKeyFormat = "block-%d"
 // Client is a wrapper over a redis client, used as our disk needed for the algorithm.
 type Client struct {
 	cfg    *config.Config
-	client *redis.Client
+	client redis.UniversalClient
 }
 
 func NewClient(cfg *config.Config, addr string) *Client {
@@ -48,6 +48,10 @@ func (c *Client) SetBlock(ctx context.Context, id int, block *block.Block) error
 
 // ReadBlocks reads all blocks for the provided ids.
 func (c *Client) ReadBlocks(ctx context.Context, ids ...int) ([]*block.Block, error) {
+	if len(ids) == 0 {
+		return []*block.Block{}, nil
+	}
+
 	keys := make([]string, 0, len(ids))
 	for _, id := range ids {
 		keys = append(keys, fmt.Sprintf(blockKeyFormat, id))
