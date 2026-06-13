@@ -6,7 +6,7 @@ import (
 	"disk-paxos/internal/block"
 )
 
-//go:generate go run go.uber.org/mock/mockgen -source=store.go -destination=../../mocks/mock_store.go -package=mocks
+//go:generate go run go.uber.org/mock/mockgen -source=store.go -destination=mocks/mock_store.go -package=mocks
 
 type Store interface {
 	SetBlock(ctx context.Context, id int, block *block.Block) error

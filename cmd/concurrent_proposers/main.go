@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"sync"
+
 	"disk-paxos/internal/config"
 	"disk-paxos/internal/disk"
 	"disk-paxos/internal/logger"
 	"disk-paxos/internal/processor"
-	"fmt"
-	"sync"
 
 	"go.uber.org/zap"
 )
@@ -40,7 +41,6 @@ func main() {
 	}
 
 	wg.Wait()
-
 }
 
 func setup() (cfg *config.Config, log *zap.Logger, clients []processor.Store) {

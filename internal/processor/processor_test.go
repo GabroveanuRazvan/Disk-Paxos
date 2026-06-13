@@ -7,7 +7,7 @@ import (
 
 	"disk-paxos/internal/block"
 	"disk-paxos/internal/config"
-	"disk-paxos/mocks"
+	"disk-paxos/internal/processor/mocks"
 
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"

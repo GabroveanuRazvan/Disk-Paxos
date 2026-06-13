@@ -222,7 +222,6 @@ func (p *Processor) WriteToDisks(ctx context.Context) error {
 			}
 			successCount.Add(1)
 		})
-
 	}
 	wg.Wait()
 
@@ -268,7 +267,6 @@ func (p *Processor) readBlocksFromDisks(ctx context.Context, ids ...int) ([]*blo
 	var successCount atomic.Int32
 
 	for i := range p.cfg.DiskCount {
-
 		wg.Go(func() {
 			client := p.clients[i]
 
@@ -284,7 +282,6 @@ func (p *Processor) readBlocksFromDisks(ctx context.Context, ids ...int) ([]*blo
 			defer blkMu.Unlock()
 			blocks = append(blocks, currentBlk...)
 		})
-
 	}
 	wg.Wait()
 
