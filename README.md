@@ -8,7 +8,7 @@ Instead of traditional distributed storage like shared disks or filesystems, thi
 The Disk-Paxos algorithm allows a group of processors (proposers) to reach a consensus on a single value, using a set of independent disks for storage. The protocol does not rely on message passing between the processors directly, but rather uses read/write operations on the disks.
 
 In this implementation:
-- **Disks** are represented by separate Redis instances. 
+- **Disks** are represented by separate Redis instances.
 - **Processors** are Go routines that run the Disk-Paxos algorithm.
 
 The algorithm progresses in two main phases (similarly to classic Paxos):
@@ -26,6 +26,7 @@ Fault tolerance is achieved by ensuring that all operations (reads and writes) a
 * **`internal/disk/`**: Contains the `Client` logic which wraps the Redis operations. It exposes methods to read, write, and delete blocks on the underlying Redis instances.
 * **`internal/processor/`**: Contains the core logic for the Paxos algorithm. The `Processor` struct executes Phase 1 and Phase 2.
 * **`internal/block/`**: Defines the data structure `Block` that is written to the disks.
+* **`tla/`**: Contains the TLA+ Disk Paxos specification files used as the formal reference model.
 * **`docker-compose.yaml`**: Used to spin up multiple Redis instances to act as our independent disks.
 
 ### Block Structure
@@ -68,3 +69,48 @@ To stop the Redis containers:
 ```bash
 make down
 ```
+
+### 6. Run Tests
+Run the regular unit/table tests:
+```bash
+make test
+```
+
+Run the same regular test suite through the table-test alias:
+```bash
+make test-table
+```
+
+Run the Go race detector:
+```bash
+make test-race
+```
+
+Run Redis integration tests through testcontainers:
+```bash
+make test-integration
+```
+This requires Docker access.
+
+Run all test suites:
+```bash
+make test-all
+```
+
+### 7. Run TLA+ Model Checking
+Download the TLA+ tools jar:
+```bash
+make tla-tools
+```
+
+Run TLC on the Disk Paxos model in `tla/`:
+```bash
+make tla-check
+```
+
+Run TLC and save the verifier output to `tlc-output.txt`:
+```bash
+make tla-check-output
+```
+
+The TLC run uses the configuration in `tla/MC_HDiskSynod.cfg` and can take a long time because it explores many possible concurrent interleavings.
