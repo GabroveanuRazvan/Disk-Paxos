@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 
@@ -212,6 +213,10 @@ func (p *Processor) WriteToDisks(ctx context.Context) error {
 	p.logger.Debug("Writing to disks")
 	wg := new(sync.WaitGroup)
 	var successCount atomic.Int32
+	stopRaceBug := p.startInjectedRaceBug()
+	if stopRaceBug != nil {
+		defer stopRaceBug()
+	}
 
 	for i := range p.cfg.DiskCount {
 		wg.Go(func() {
@@ -230,6 +235,35 @@ func (p *Processor) WriteToDisks(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (p *Processor) startInjectedRaceBug() func() {
+	if !p.cfg.InjectRaceBug {
+		return nil
+	}
+
+	done := make(chan struct{})
+	stop := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				p.Block.Mbal++
+				p.Block.Inp = fmt.Sprintf("race-bug-%d", p.Block.Mbal)
+				runtime.Gosched()
+			}
+		}
+	}()
+
+	return func() {
+		close(stop)
+		<-done
+	}
 }
 
 // ReadFromDisks reads the blocks in parallel to all disks.

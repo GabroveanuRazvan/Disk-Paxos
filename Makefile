@@ -2,8 +2,13 @@ TLA_TOOLS := tools/tla2tools.jar
 TLC_WORKERS ?= auto
 TLC_CFG ?= MC_HDiskSynod.cfg
 TLC_SPEC ?= MC_HDiskSynod.tla
+TEST_RACE_TAGS :=
 
-.PHONY: run clear up down fumpt test test-table test-race test-integration test-all tla-tools tla-check tla-check-output
+ifneq ($(filter true 1 yes,$(INJECT_RACE_BUG)),)
+TEST_RACE_TAGS := -tags=racebug
+endif
+
+.PHONY: run clear up down fumpt test test-table test-race test-race-bug test-integration test-all tla-tools tla-check tla-check-output
 
 
 run:
@@ -33,7 +38,11 @@ test-table: test
 
 # Run tests with the Go race detector.
 test-race:
-	go test -count=1 -race ./...
+	go test -count=1 -race $(TEST_RACE_TAGS) ./...
+
+# Run the intentionally broken race-condition demonstration.
+test-race-bug:
+	$(MAKE) test-race INJECT_RACE_BUG=true
 
 # Run tests that require external services through testcontainers.
 test-integration:

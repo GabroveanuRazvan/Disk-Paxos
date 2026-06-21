@@ -11,6 +11,7 @@ type Config struct {
 	DiskCount      int      `mapstructure:"DISK_COUNT"`
 	DiskAddresses  []string `mapstructure:"DISK_ADDRESSES"`
 	Retries        int      `mapstructure:"RETRIES"`
+	InjectRaceBug  bool     `mapstructure:"INJECT_RACE_BUG"`
 }
 
 func setDefaults() {
@@ -22,6 +23,7 @@ func setDefaults() {
 		"localhost:6381",
 	})
 	viper.SetDefault("RETRIES", 3)
+	viper.SetDefault("INJECT_RACE_BUG", false)
 }
 
 func LoadConfig() (*Config, error) {

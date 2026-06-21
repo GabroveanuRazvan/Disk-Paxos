@@ -86,6 +86,12 @@ Run the Go race detector:
 make test-race
 ```
 
+Run the intentionally broken race-condition demonstration:
+```bash
+make test-race-bug
+```
+This enables the `INJECT_RACE_BUG` config flag and includes the tagged race-demo test. The command is expected to fail with `WARNING: DATA RACE`.
+
 Run Redis integration tests through testcontainers:
 ```bash
 make test-integration
